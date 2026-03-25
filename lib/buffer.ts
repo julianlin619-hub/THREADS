@@ -1,22 +1,47 @@
+const BUFFER_GRAPHQL_URL = 'https://api.buffer.com/graphql';
+
+const CREATE_IDEA_MUTATION = `
+  mutation CreateIdea($organizationId: String!, $title: String!, $text: String!) {
+    createIdea(input: {
+      organizationId: $organizationId
+      content: {
+        title: $title
+        text: $text
+      }
+    }) {
+      ... on Idea {
+        id
+        content {
+          title
+          text
+        }
+      }
+    }
+  }
+`;
+
 export async function postToBuffer(text: string): Promise<{ id: string; status: string }> {
   const token = process.env.BUFFER_ACCESS_TOKEN;
-  const profileId = process.env.BUFFER_THREADS_PROFILE_ID;
+  const organizationId = process.env.BUFFER_ORGANIZATION_ID;
 
-  if (!token || !profileId) {
-    throw new Error('BUFFER_ACCESS_TOKEN and BUFFER_THREADS_PROFILE_ID must be set in .env.local');
+  if (!token || !organizationId) {
+    throw new Error('BUFFER_ACCESS_TOKEN and BUFFER_ORGANIZATION_ID must be set in .env.local');
   }
 
-  const body = new URLSearchParams({
-    access_token: token,
-    'profile_ids[]': profileId,
-    text,
-    now: 'false',
-  });
+  // Use the first line (or first 100 chars) as the idea title
+  const firstLine = text.split('\n')[0];
+  const title = firstLine.length > 100 ? firstLine.slice(0, 97) + '…' : firstLine;
 
-  const res = await fetch('https://api.bufferapp.com/1/updates/create.json', {
+  const res = await fetch(BUFFER_GRAPHQL_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      query: CREATE_IDEA_MUTATION,
+      variables: { organizationId, title, text },
+    }),
   });
 
   if (!res.ok) {
@@ -24,9 +49,15 @@ export async function postToBuffer(text: string): Promise<{ id: string; status: 
     throw new Error(`Buffer API error ${res.status}: ${detail}`);
   }
 
-  const data = (await res.json()) as { id?: string; updates?: { id: string }[] };
+  const data = (await res.json()) as {
+    data?: { createIdea?: { id: string } };
+    errors?: { message: string }[];
+  };
 
-  // Buffer returns either { id } or { updates: [{ id }] }
-  const id = data.id ?? data.updates?.[0]?.id ?? 'unknown';
-  return { id, status: 'queued' };
+  if (data.errors?.length) {
+    throw new Error(`Buffer GraphQL error: ${data.errors.map((e) => e.message).join(', ')}`);
+  }
+
+  const id = data.data?.createIdea?.id ?? 'unknown';
+  return { id, status: 'created' };
 }

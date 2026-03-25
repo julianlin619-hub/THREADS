@@ -57,25 +57,31 @@ POST /api/post-threads
 
 ## Buffer Integration
 
-**Endpoint:** `POST https://api.bufferapp.com/1/updates/create.json`
-**Auth:** OAuth long-lived access token via `BUFFER_ACCESS_TOKEN` env var
-**Content-Type:** `application/x-www-form-urlencoded`
+**API:** GraphQL at `https://api.buffer.com/graphql`
+**Auth:** Bearer token via `BUFFER_ACCESS_TOKEN` env var
+**Organization ID:** `67dafe21c453882020852a9a` (set as `BUFFER_ORGANIZATION_ID`)
 
-**Request parameters:**
-- `access_token` — long-lived OAuth token
-- `profile_ids[]` — Buffer profile ID for the connected Threads account (`BUFFER_THREADS_PROFILE_ID`)
-- `text` — verbatim tweet text
-- `now` — `false` (adds to scheduled queue, not immediate post)
-
-**How to get your Threads profile ID:**
-```bash
-curl "https://api.bufferapp.com/1/profiles.json?access_token=YOUR_TOKEN"
+**Mutation used:**
+```graphql
+mutation CreateIdea {
+  createIdea(input: {
+    organizationId: "67dafe21c453882020852a9a"
+    content: {
+      title: "<first line of tweet, max 100 chars>"
+      text: "<full tweet text verbatim>"
+    }
+  }) {
+    ... on Idea {
+      id
+      content { title text }
+    }
+  }
+}
 ```
-Find the object where `"service": "threads"` and copy its `"id"` field.
 
-**Rate limits:** 60 authenticated requests per user per minute.
+Each tweet is created as a Buffer **Idea** — Buffer's content pool from which posts can be scheduled to Threads and other channels.
 
-**Important constraint:** Buffer no longer accepts new developer app registrations. You must already have an existing Buffer developer app. Contact Buffer support if you need API access.
+**Important constraint:** Buffer no longer accepts new developer app registrations. You must already have an existing Buffer developer app with a valid access token.
 
 ---
 
@@ -129,7 +135,7 @@ To reset and reprocess all tweets: use the "Reset History" button in the web UI 
 |----------|----------|-------------|
 | `APIFY_API_KEY` | Yes | Apify API token for tweet scraping |
 | `BUFFER_ACCESS_TOKEN` | Yes | Buffer OAuth long-lived access token |
-| `BUFFER_THREADS_PROFILE_ID` | Yes | Buffer profile ID for connected Threads account |
+| `BUFFER_ORGANIZATION_ID` | Yes | Buffer organization ID (`67dafe21c453882020852a9a`) |
 | `PORT` | No | Server port (default: 3000) |
 
 ---
