@@ -82,10 +82,6 @@ jobs:
           # Save to file to avoid shell escaping issues with quotes/apostrophes
           echo "$RESPONSE" | jq '.tweets' > /tmp/tweets.json
 
-      - name: No new tweets — skipping generate & upload
-        if: steps.fetch.outputs.tweet_count == '0'
-        run: echo "No new tweets found — all recent 4k+ tweets have already been processed."
-
       - name: Step 2 — Generate PNG + MP4 files
         id: generate
         if: steps.fetch.outputs.tweet_count != '0'
@@ -103,8 +99,13 @@ jobs:
           echo "$RESPONSE" | jq '.files' > /tmp/files.json
           echo "Generate complete — $(echo "$RESPONSE" | jq '.files | length') files"
 
+      - name: Prepare empty files list (no new tweets)
+        if: steps.fetch.outputs.tweet_count == '0'
+        run: |
+          echo "No new tweets — creating empty folder on Drive."
+          echo '[]' > /tmp/files.json
+
       - name: Step 3 — Upload to Google Drive
-        if: steps.fetch.outputs.tweet_count != '0'
         run: |
           RESPONSE=$(curl -s --max-time 120 -X POST http://localhost:3000/api/upload-drive \
             -H "Content-Type: application/json" \
@@ -116,7 +117,7 @@ jobs:
             exit 1
           fi
 
-          echo "Pipeline complete. Files uploaded to Google Drive."
+          echo "Pipeline complete."
           echo "https://drive.google.com/drive/folders/0AEw3aJ2mMki4Uk9PVA"
 
       - name: Clean up secrets from disk
