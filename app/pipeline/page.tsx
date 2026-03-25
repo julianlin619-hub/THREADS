@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 interface Tweet {
   id: string;
   text: string;
-  likeCount: number;
   createdAt: string;
   url: string;
 }

@@ -29,10 +29,10 @@ jobs:
 
       - name: Write .env.local from secrets
         run: |
-          printf 'APIFY_API_KEY=%s\nBUFFER_ACCESS_TOKEN=%s\nBUFFER_ORGANIZATION_ID=%s\n' \
+          printf 'APIFY_API_KEY=%s\nBUFFER_ACCESS_TOKEN=%s\nBUFFER_THREADS_CHANNEL_ID=%s\n' \
             '${{ secrets.APIFY_API_KEY }}' \
             '${{ secrets.BUFFER_ACCESS_TOKEN }}' \
-            '${{ secrets.BUFFER_ORGANIZATION_ID }}' > .env.local
+            '${{ secrets.BUFFER_THREADS_CHANNEL_ID }}' > .env.local
 
       - name: Build Next.js app
         run: npm run build

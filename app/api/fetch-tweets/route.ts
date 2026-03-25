@@ -40,7 +40,6 @@ export async function POST() {
       .map((t) => ({
         id: String(t.id ?? ''),
         text: decodeHtml(String(t.text ?? '')),
-        likeCount: Number(t.likeCount ?? 0),
         createdAt: String(t.createdAt ?? ''),
         url: String(t.url ?? ''),
       }))

@@ -1,36 +1,33 @@
 const BUFFER_GRAPHQL_URL = 'https://api.buffer.com/graphql';
 
-const CREATE_IDEA_MUTATION = `
-  mutation CreateIdea($organizationId: String!, $title: String!, $text: String!) {
-    createIdea(input: {
-      organizationId: $organizationId
-      content: {
-        title: $title
-        text: $text
-      }
+const CREATE_POST_MUTATION = `
+  mutation CreatePost($channelId: ChannelId!, $text: String!) {
+    createPost(input: {
+      channelId: $channelId
+      text: $text
+      schedulingType: automatic
+      mode: addToQueue
     }) {
-      ... on Idea {
-        id
-        content {
-          title
-          text
+      ... on PostActionSuccess {
+        post {
+          id
+          status
         }
       }
+      ... on InvalidInputError { message }
+      ... on UnexpectedError { message }
+      ... on LimitReachedError { message }
     }
   }
 `;
 
 export async function postToBuffer(text: string): Promise<{ id: string; status: string }> {
   const token = process.env.BUFFER_ACCESS_TOKEN;
-  const organizationId = process.env.BUFFER_ORGANIZATION_ID;
+  const channelId = process.env.BUFFER_THREADS_CHANNEL_ID;
 
-  if (!token || !organizationId) {
-    throw new Error('BUFFER_ACCESS_TOKEN and BUFFER_ORGANIZATION_ID must be set in .env.local');
+  if (!token || !channelId) {
+    throw new Error('BUFFER_ACCESS_TOKEN and BUFFER_THREADS_CHANNEL_ID must be set in .env.local');
   }
-
-  // Use the first line (or first 100 chars) as the idea title
-  const firstLine = text.split('\n')[0];
-  const title = firstLine.length > 100 ? firstLine.slice(0, 97) + '…' : firstLine;
 
   const res = await fetch(BUFFER_GRAPHQL_URL, {
     method: 'POST',
@@ -39,8 +36,8 @@ export async function postToBuffer(text: string): Promise<{ id: string; status: 
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      query: CREATE_IDEA_MUTATION,
-      variables: { organizationId, title, text },
+      query: CREATE_POST_MUTATION,
+      variables: { channelId, text },
     }),
   });
 
@@ -50,7 +47,7 @@ export async function postToBuffer(text: string): Promise<{ id: string; status: 
   }
 
   const data = (await res.json()) as {
-    data?: { createIdea?: { id: string } };
+    data?: { createPost?: { post?: { id: string; status: string }; message?: string } };
     errors?: { message: string }[];
   };
 
@@ -58,6 +55,11 @@ export async function postToBuffer(text: string): Promise<{ id: string; status: 
     throw new Error(`Buffer GraphQL error: ${data.errors.map((e) => e.message).join(', ')}`);
   }
 
-  const id = data.data?.createIdea?.id ?? 'unknown';
-  return { id, status: 'created' };
+  const result = data.data?.createPost;
+  if (result?.message) {
+    throw new Error(`Buffer error: ${result.message}`);
+  }
+
+  const post = result?.post;
+  return { id: post?.id ?? 'unknown', status: post?.status ?? 'queued' };
 }
