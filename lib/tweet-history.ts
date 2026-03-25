@@ -5,7 +5,7 @@ const HISTORY_FILE = path.join(process.cwd(), 'data', 'tweet-history.json');
 
 interface TweetHistory {
   seenIds: string[];
-  batchCount: number;
+  postCount: number;
 }
 
 function getHistory(): TweetHistory {
@@ -13,7 +13,7 @@ function getHistory(): TweetHistory {
     const raw = fs.readFileSync(HISTORY_FILE, 'utf-8');
     return JSON.parse(raw) as TweetHistory;
   } catch {
-    const defaults: TweetHistory = { seenIds: [], batchCount: 0 };
+    const defaults: TweetHistory = { seenIds: [], postCount: 0 };
     fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(defaults, null, 2));
     return defaults;
@@ -31,15 +31,13 @@ export function addSeenIds(ids: string[]): void {
   writeHistory({ ...history, seenIds: merged });
 }
 
-export function getNextBatchNumber(): number {
+export function incrementPostCount(): void {
   const history = getHistory();
-  const next = history.batchCount + 1;
-  writeHistory({ ...history, batchCount: next });
-  return next;
+  writeHistory({ ...history, postCount: history.postCount + 1 });
 }
 
 export function resetHistory(): void {
-  writeHistory({ seenIds: [], batchCount: 0 });
+  writeHistory({ seenIds: [], postCount: 0 });
 }
 
 export { getHistory };

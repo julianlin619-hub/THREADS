@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,40 +13,22 @@ interface Tweet {
   url: string;
 }
 
-interface GeneratedFile {
+interface PostError {
   id: string;
-  filePath: string;
-  fileName: string;
-  videoFilePath: string;
-  videoFileName: string;
+  error: string;
 }
-
-interface UploadResult {
-  fileName: string;
-  driveId: string;
-}
-
-interface BatchFolder {
-  id: string;
-  name: string;
-}
-
-const DRIVE_ROOT_URL = 'https://drive.google.com/drive/folders/0AEw3aJ2mMki4Uk9PVA';
 
 export default function PipelinePage() {
   const [tweets, setTweets] = useState<Tweet[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
-  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
-  const [batchFolder, setBatchFolder] = useState<BatchFolder | null>(null);
 
   const [fetchLoading, setFetchLoading] = useState(false);
-  const [generateLoading, setGenerateLoading] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
+  const [postLoading, setPostLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [postResult, setPostResult] = useState<{ posted: number; errors: PostError[] } | null>(null);
 
   async function handleReset() {
     setResetLoading(true);
@@ -56,6 +37,7 @@ export default function PipelinePage() {
       await fetch('/api/reset-history', { method: 'POST' });
       setTweets([]);
       setSelectedIds(new Set());
+      setPostResult(null);
       setError(null);
       setResetConfirm(false);
       setResetSuccess(true);
@@ -68,13 +50,16 @@ export default function PipelinePage() {
   async function fetchTweets() {
     setFetchLoading(true);
     setError(null);
+    setPostResult(null);
     try {
       const res = await fetch('/api/fetch-tweets', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch tweets');
       setTweets(data.tweets);
       setSelectedIds(new Set(data.tweets.map((t: Tweet) => t.id)));
-      if (data.tweets.length === 0) setError('No new tweets — all recent 4k+ tweets have already been seen. Reset history to re-fetch them.');
+      if (data.tweets.length === 0) {
+        setError('No new tweets in the past 24 hours — all recent tweets have already been seen. Reset history to re-fetch.');
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -99,58 +84,37 @@ export default function PipelinePage() {
     setSelectedIds(new Set());
   }
 
-  async function generateAndUpload() {
-    setGenerateLoading(true);
+  async function postToThreads() {
+    setPostLoading(true);
     setError(null);
-    setBatchFolder(null);
-    setUploadResults([]);
+    setPostResult(null);
     try {
       const selectedTweets = tweets.filter((t) => selectedIds.has(t.id));
-      const genRes = await fetch('/api/generate', {
+      const res = await fetch('/api/post-threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tweets: selectedTweets }),
       });
-      const genData = await genRes.json();
-      if (!genRes.ok) throw new Error(genData.error || 'Failed to generate images');
-      setGeneratedFiles(genData.files);
-
-      setGenerateLoading(false);
-      setUploadLoading(true);
-
-      const upRes = await fetch('/api/upload-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ files: genData.files }),
-      });
-      const upData = await upRes.json();
-      if (!upRes.ok) throw new Error(upData.error || 'Failed to upload to Drive');
-      setBatchFolder(upData.batchFolder);
-      setUploadResults(upData.uploadedFiles);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to post to Threads');
+      setPostResult(data);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setGenerateLoading(false);
-      setUploadLoading(false);
+      setPostLoading(false);
     }
   }
 
   const selectedCount = selectedIds.size;
-  const isRunning = generateLoading || uploadLoading;
 
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b border-border px-8 py-4 flex items-center gap-3 flex-shrink-0">
         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-black text-sm">
-          C
+          T
         </div>
-        <h1 className="font-bold text-lg tracking-tight">CANVAS</h1>
-        <span className="text-muted-foreground text-sm">Tweet Pipeline</span>
-        <div className="ml-auto">
-          <Link href="/design" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Design Debugger →
-          </Link>
-        </div>
+        <h1 className="font-bold text-lg tracking-tight">THREADS</h1>
+        <span className="text-muted-foreground text-sm">Tweet → Threads Pipeline</span>
       </header>
 
       <main className="flex-1 p-8">
@@ -189,7 +153,7 @@ export default function PipelinePage() {
                   </button>
                 ) : (
                   <span className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Clear seen tweet history and reset batch numbering?</span>
+                    <span className="text-muted-foreground">Clear seen tweet history?</span>
                     <button
                       onClick={handleReset}
                       disabled={resetLoading}
@@ -206,7 +170,7 @@ export default function PipelinePage() {
                   </span>
                 )}
                 {resetSuccess && (
-                  <span className="text-sm text-green-500">History cleared. Next batch will be #1.</span>
+                  <span className="text-sm text-green-500">History cleared.</span>
                 )}
               </div>
 
@@ -237,8 +201,16 @@ export default function PipelinePage() {
                         <div className="flex-1 min-w-0 space-y-1">
                           <p className="text-sm text-foreground whitespace-pre-wrap">{tweet.text}</p>
                           <div className="flex gap-3 text-xs text-muted-foreground">
-                            <span>{tweet.likeCount.toLocaleString()} likes</span>
-                            <span>{new Date(tweet.createdAt).toLocaleDateString()}</span>
+                            <span>{new Date(tweet.createdAt).toLocaleString()}</span>
+                            <a
+                              href={tweet.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              View tweet ↗
+                            </a>
                           </div>
                         </div>
                       </label>
@@ -249,131 +221,56 @@ export default function PipelinePage() {
             </CardContent>
           </Card>
 
-          {/* Generate & Upload — shown once tweets are fetched */}
+          {/* Post to Threads */}
           {tweets.length > 0 && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
                     <Badge variant="primary">2</Badge>
-                    Generate & Upload
+                    Post to Threads
                   </CardTitle>
-                  {batchFolder && <Badge variant="success">Done</Badge>}
+                  {postResult && <Badge variant="success">{postResult.posted} queued</Badge>}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {!batchFolder && (
-                  <Button onClick={generateAndUpload} disabled={isRunning || selectedCount === 0}>
-                    {generateLoading
-                      ? `Generating ${selectedCount} PNG${selectedCount !== 1 ? 's' : ''} + MP4${selectedCount !== 1 ? 's' : ''}…`
-                      : uploadLoading
-                      ? 'Uploading to Drive…'
-                      : `Generate & Upload ${selectedCount} PNG${selectedCount !== 1 ? 's' : ''} + MP4${selectedCount !== 1 ? 's' : ''}`}
+                {!postResult && (
+                  <Button onClick={postToThreads} disabled={postLoading || selectedCount === 0}>
+                    {postLoading
+                      ? `Queueing ${selectedCount} tweet${selectedCount !== 1 ? 's' : ''}…`
+                      : `Queue ${selectedCount} tweet${selectedCount !== 1 ? 's' : ''} to Buffer`}
                   </Button>
                 )}
 
-                {generateLoading && (
-                  <p className="text-sm text-muted-foreground">Rendering images…</p>
-                )}
-
-                {uploadLoading && generatedFiles.length > 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Generated {generatedFiles.length} image{generatedFiles.length !== 1 ? 's' : ''}, uploading…
-                  </p>
-                )}
-
-                {batchFolder && (
-                  <div className="space-y-4">
+                {postResult && (
+                  <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      {uploadResults.length} file{uploadResults.length !== 1 ? 's' : ''} uploaded to{' '}
-                      <span className="text-foreground font-medium">{batchFolder.name}</span>.
+                      <span className="text-foreground font-medium">{postResult.posted}</span> tweet{postResult.posted !== 1 ? 's' : ''} added to your Buffer queue for Threads.
                     </p>
-                    <div className="flex gap-3 flex-wrap">
-                      <a
-                        href={`https://drive.google.com/drive/folders/${batchFolder.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                      >
-                        Open {batchFolder.name} ↗
-                      </a>
-                      <Button
-                        variant="secondary"
-                        onClick={async () => {
-                          const imageFilenames = generatedFiles.map((f) => f.fileName);
-                          const videoFilenames = generatedFiles.map((f) => f.videoFileName);
-                          const res = await fetch('/api/download-zip', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ imageFilenames, videoFilenames }),
-                          });
-                          const blob = await res.blob();
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'tweet-exports.zip';
-                          a.click();
-                          URL.revokeObjectURL(url);
-                        }}
-                      >
-                        Download ZIP
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setTweets([]);
-                          setSelectedIds(new Set());
-                          setGeneratedFiles([]);
-                          setUploadResults([]);
-                          setBatchFolder(null);
-                          setError(null);
-                        }}
-                      >
-                        Start Over
-                      </Button>
-                    </div>
-
-                    {generatedFiles.length > 0 && (
+                    {postResult.errors.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Downloads</p>
-                        <div className="space-y-1">
-                          {generatedFiles.map((f) => (
-                            <div key={f.id} className="flex items-center gap-3 text-sm">
-                              <span className="text-muted-foreground truncate flex-1">{f.fileName}</span>
-                              <a
-                                href={`/api/download/${f.fileName}`}
-                                className="text-primary hover:underline"
-                              >
-                                PNG
-                              </a>
-                              <a
-                                href={`/api/download/${f.videoFileName}`}
-                                className="text-primary hover:underline"
-                              >
-                                MP4
-                              </a>
-                            </div>
-                          ))}
-                        </div>
+                        <p className="text-xs text-red-400 font-medium">{postResult.errors.length} error{postResult.errors.length !== 1 ? 's' : ''}:</p>
+                        {postResult.errors.map((e) => (
+                          <p key={e.id} className="text-xs text-red-400">{e.error}</p>
+                        ))}
                       </div>
                     )}
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setTweets([]);
+                        setSelectedIds(new Set());
+                        setPostResult(null);
+                        setError(null);
+                      }}
+                    >
+                      Start Over
+                    </Button>
                   </div>
                 )}
               </CardContent>
             </Card>
           )}
-
-          {/* Google Drive shortcut */}
-          <div className="pt-2">
-            <a
-              href={DRIVE_ROOT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
-            >
-              Open Google Drive ↗
-            </a>
-          </div>
         </div>
       </main>
     </div>

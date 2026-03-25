@@ -26,14 +26,15 @@ export async function POST() {
     const client = new ApifyClient({ token: apiKey });
 
     const { defaultDatasetId } = await client.actor('apidojo~tweet-scraper').call({
-      twitterHandles: ['AlexHormozi'],   // ✅ profile-specific param
-      maxItems: 30,
+      twitterHandles: ['AlexHormozi'],
+      maxItems: 50,
       sort: 'Latest',
-      minimumFavorites: 4000,
     });
 
     const { items } = await client.dataset(defaultDatasetId).listItems();
     const raw = items as Record<string, unknown>[];
+
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 
     const tweets = raw
       .map((t) => ({
@@ -41,10 +42,9 @@ export async function POST() {
         text: decodeHtml(String(t.text ?? '')),
         likeCount: Number(t.likeCount ?? 0),
         createdAt: String(t.createdAt ?? ''),
-        url: String(t.url ?? ''),              // ✅ useful to have
-        retweetCount: Number(t.retweetCount ?? 0), // ✅ useful to have
+        url: String(t.url ?? ''),
       }))
-      .filter((t) => t.text.trim() && t.likeCount >= 4000)
+      .filter((t) => t.text.trim() && new Date(t.createdAt).getTime() >= cutoff)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const { seenIds } = getHistory();

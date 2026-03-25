@@ -1,0 +1,104 @@
+name: THREADS Pipeline
+
+on:
+  schedule:
+    # Runs Mon–Fri at 9:00 AM UTC
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch: # Allow manual runs from GitHub UI
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env.local from secrets
+        run: |
+          printf 'APIFY_API_KEY=%s\nBUFFER_ACCESS_TOKEN=%s\nBUFFER_THREADS_PROFILE_ID=%s\n' \
+            '${{ secrets.APIFY_API_KEY }}' \
+            '${{ secrets.BUFFER_ACCESS_TOKEN }}' \
+            '${{ secrets.BUFFER_THREADS_PROFILE_ID }}' > .env.local
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Start server
+        run: |
+          npm run start &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Server ready after ${i}s"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 2
+          done
+
+      - name: Step 1 — Fetch tweets from Apify
+        id: fetch
+        run: |
+          echo "Fetching tweets from @AlexHormozi (past 24h)..."
+          RESPONSE=$(curl -s --max-time 300 -X POST http://localhost:3000/api/fetch-tweets \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"
+
+          if [ -z "$RESPONSE" ]; then
+            echo "fetch-tweets returned empty response"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "fetch-tweets failed: $RESPONSE"
+            exit 1
+          fi
+
+          TWEET_COUNT=$(echo "$RESPONSE" | jq '.tweets | length')
+          echo "Found $TWEET_COUNT new tweets"
+          echo "tweet_count=$TWEET_COUNT" >> $GITHUB_OUTPUT
+
+          echo "$RESPONSE" | jq '.tweets' > /tmp/tweets.json
+
+      - name: Step 2 — Post to Threads via Buffer
+        if: steps.fetch.outputs.tweet_count != '0'
+        run: |
+          RESPONSE=$(curl -s --max-time 120 -X POST http://localhost:3000/api/post-threads \
+            -H "Content-Type: application/json" \
+            -d "{\"tweets\": $(cat /tmp/tweets.json)}")
+          echo "Response: $RESPONSE"
+
+          if [ -z "$RESPONSE" ]; then
+            echo "post-threads returned empty response"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "post-threads failed: $RESPONSE"
+            exit 1
+          fi
+
+          POSTED=$(echo "$RESPONSE" | jq '.posted')
+          ERRORS=$(echo "$RESPONSE" | jq '.errors | length')
+          echo "Pipeline complete — queued $POSTED tweets to Buffer, $ERRORS errors."
+
+      - name: No new tweets
+        if: steps.fetch.outputs.tweet_count == '0'
+        run: echo "No new tweets from @AlexHormozi in the past 24 hours. Nothing to post."
+
+      - name: Clean up secrets from disk
+        if: always()
+        run: rm -f .env.local

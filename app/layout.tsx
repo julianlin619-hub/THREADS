@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'CANVAS — Image Editor',
-  description: 'HTML Canvas image editor for quote cards',
+  title: 'THREADS — Tweet Syndication Pipeline',
+  description: 'Scrape tweets and repost them to Threads via Buffer',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
