@@ -6,6 +6,9 @@ on:
     - cron: '0 9 * * 1-5'
   workflow_dispatch: # Allow manual runs from GitHub UI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
@@ -37,10 +40,9 @@ jobs:
 
       - name: Write .env.local from secrets
         run: |
-          cat > .env.local << EOF
-          APIFY_API_KEY=${{ secrets.APIFY_API_KEY }}
-          GOOGLE_DRIVE_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          EOF
+          printf 'APIFY_API_KEY=%s\nGOOGLE_DRIVE_FOLDER_ID=%s\n' \
+            '${{ secrets.APIFY_API_KEY }}' \
+            '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' > .env.local
 
       - name: Write service-account.json from secret
         run: echo '${{ secrets.SERVICE_ACCOUNT_JSON }}' > service-account.json
@@ -51,10 +53,9 @@ jobs:
       - name: Start server
         run: |
           npm run start &
-          # Wait for server to be ready
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3000 > /dev/null 2>&1; then
-              echo "Server ready"
+              echo "Server ready after ${i}s"
               break
             fi
             echo "Waiting for server... ($i)"
@@ -64,59 +65,53 @@ jobs:
       - name: Step 1 — Fetch tweets from Apify
         id: fetch
         run: |
-          echo "Fetching tweets..."
-          RESPONSE=$(curl -sf --max-time 300 -X POST http://localhost:3000/api/fetch-tweets \
+          echo "Fetching tweets (may take 1-3 min)..."
+          RESPONSE=$(curl -s --max-time 300 -X POST http://localhost:3000/api/fetch-tweets \
             -H "Content-Type: application/json")
           echo "Response: $RESPONSE"
 
-          # Check for error field
-          if echo "$RESPONSE" | grep -q '"error"'; then
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             echo "fetch-tweets failed: $RESPONSE"
             exit 1
           fi
 
-          TWEET_COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data['tweets']))")
+          TWEET_COUNT=$(echo "$RESPONSE" | jq '.tweets | length')
           echo "Found $TWEET_COUNT new tweets"
           echo "tweet_count=$TWEET_COUNT" >> $GITHUB_OUTPUT
-          echo "tweets_json=$RESPONSE" >> $GITHUB_OUTPUT
 
-      - name: Check tweet count
+          # Save to file to avoid shell escaping issues with quotes/apostrophes
+          echo "$RESPONSE" | jq '.tweets' > /tmp/tweets.json
+
+      - name: No new tweets — skipping generate & upload
         if: steps.fetch.outputs.tweet_count == '0'
-        run: |
-          echo "No new tweets found — all recent 4k+ tweets have already been processed. Pipeline complete."
-          exit 0
+        run: echo "No new tweets found — all recent 4k+ tweets have already been processed."
 
       - name: Step 2 — Generate PNG + MP4 files
         id: generate
         if: steps.fetch.outputs.tweet_count != '0'
         run: |
-          TWEETS='${{ steps.fetch.outputs.tweets_json }}'
-          TWEETS_ARRAY=$(echo "$TWEETS" | python3 -c "import sys,json; data=json.load(sys.stdin); print(json.dumps(data['tweets']))")
-
-          RESPONSE=$(curl -sf --max-time 300 -X POST http://localhost:3000/api/generate \
+          RESPONSE=$(curl -s --max-time 300 -X POST http://localhost:3000/api/generate \
             -H "Content-Type: application/json" \
-            -d "{\"tweets\": $TWEETS_ARRAY}")
+            -d "{\"tweets\": $(cat /tmp/tweets.json)}")
           echo "Response: $RESPONSE"
 
-          if echo "$RESPONSE" | grep -q '"error"'; then
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             echo "generate failed: $RESPONSE"
             exit 1
           fi
 
-          echo "files_json=$RESPONSE" >> $GITHUB_OUTPUT
+          echo "$RESPONSE" | jq '.files' > /tmp/files.json
+          echo "Generate complete — $(echo "$RESPONSE" | jq '.files | length') files"
 
       - name: Step 3 — Upload to Google Drive
         if: steps.fetch.outputs.tweet_count != '0'
         run: |
-          FILES='${{ steps.generate.outputs.files_json }}'
-          FILES_ARRAY=$(echo "$FILES" | python3 -c "import sys,json; data=json.load(sys.stdin); print(json.dumps(data['files']))")
-
-          RESPONSE=$(curl -sf --max-time 120 -X POST http://localhost:3000/api/upload-drive \
+          RESPONSE=$(curl -s --max-time 120 -X POST http://localhost:3000/api/upload-drive \
             -H "Content-Type: application/json" \
-            -d "{\"files\": $FILES_ARRAY}")
+            -d "{\"files\": $(cat /tmp/files.json)}")
           echo "Response: $RESPONSE"
 
-          if echo "$RESPONSE" | grep -q '"error"'; then
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             echo "upload-drive failed: $RESPONSE"
             exit 1
           fi
@@ -126,5 +121,4 @@ jobs:
 
       - name: Clean up secrets from disk
         if: always()
-        run: |
-          rm -f .env.local service-account.json
+        run: rm -f .env.local service-account.json
