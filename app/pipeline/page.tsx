@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -145,6 +146,11 @@ export default function PipelinePage() {
         </div>
         <h1 className="font-bold text-lg tracking-tight">CANVAS</h1>
         <span className="text-muted-foreground text-sm">Tweet Pipeline</span>
+        <div className="ml-auto">
+          <Link href="/design" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Design Debugger →
+          </Link>
+        </div>
       </header>
 
       <main className="flex-1 p-8">
