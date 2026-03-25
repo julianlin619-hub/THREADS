@@ -40,19 +40,20 @@ jobs:
 
       - name: Write .env.local from secrets
         run: |
-          printf 'APIFY_API_KEY=%s\nGOOGLE_DRIVE_FOLDER_ID=%s\n' \
+          printf 'APIFY_API_KEY=%s\nGOOGLE_DRIVE_FOLDER_ID=%s\nGOOGLE_SERVICE_ACCOUNT_KEY_FILE=%s\n' \
             '${{ secrets.APIFY_API_KEY }}' \
-            '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' > .env.local
+            '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' \
+            'service-account.json' > .env.local
 
       - name: Write service-account.json from secret
         run: |
-          if [ -z '${{ secrets.SERVICE_ACCOUNT_JSON }}' ]; then
-            echo "ERROR: SERVICE_ACCOUNT_JSON secret is empty or not set"
+          if [ -z '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY_FILE }}' ]; then
+            echo "ERROR: GOOGLE_SERVICE_ACCOUNT_KEY_FILE secret is empty or not set"
             exit 1
           fi
-          echo '${{ secrets.SERVICE_ACCOUNT_JSON }}' > service-account.json
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY_FILE }}' > service-account.json
           if ! jq -e . service-account.json > /dev/null 2>&1; then
-            echo "ERROR: SERVICE_ACCOUNT_JSON is not valid JSON"
+            echo "ERROR: GOOGLE_SERVICE_ACCOUNT_KEY_FILE is not valid JSON"
             exit 1
           fi
           echo "service-account.json written and validated."
@@ -133,7 +134,7 @@ jobs:
           echo "Response: $RESPONSE"
 
           if [ -z "$RESPONSE" ]; then
-            echo "upload-drive returned empty response — check SERVICE_ACCOUNT_JSON and Drive permissions"
+            echo "upload-drive returned empty response — check GOOGLE_SERVICE_ACCOUNT_KEY_FILE and Drive permissions"
             exit 1
           fi
 
