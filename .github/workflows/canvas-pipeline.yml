@@ -1,0 +1,130 @@
+name: CANVAS Tweet Pipeline
+
+on:
+  schedule:
+    # Runs Mon–Fri at 9:00 AM UTC (adjust timezone offset as needed)
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch: # Allow manual runs from GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system dependencies (canvas)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env.local from secrets
+        run: |
+          cat > .env.local << EOF
+          APIFY_API_KEY=${{ secrets.APIFY_API_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID=${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          EOF
+
+      - name: Write service-account.json from secret
+        run: echo '${{ secrets.SERVICE_ACCOUNT_JSON }}' > service-account.json
+
+      - name: Build Next.js app
+        run: npm run build
+
+      - name: Start server
+        run: |
+          npm run start &
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Server ready"
+              break
+            fi
+            echo "Waiting for server... ($i)"
+            sleep 2
+          done
+
+      - name: Step 1 — Fetch tweets from Apify
+        id: fetch
+        run: |
+          echo "Fetching tweets..."
+          RESPONSE=$(curl -sf --max-time 300 -X POST http://localhost:3000/api/fetch-tweets \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"
+
+          # Check for error field
+          if echo "$RESPONSE" | grep -q '"error"'; then
+            echo "fetch-tweets failed: $RESPONSE"
+            exit 1
+          fi
+
+          TWEET_COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data['tweets']))")
+          echo "Found $TWEET_COUNT new tweets"
+          echo "tweet_count=$TWEET_COUNT" >> $GITHUB_OUTPUT
+          echo "tweets_json=$RESPONSE" >> $GITHUB_OUTPUT
+
+      - name: Check tweet count
+        if: steps.fetch.outputs.tweet_count == '0'
+        run: |
+          echo "No new tweets found — all recent 4k+ tweets have already been processed. Pipeline complete."
+          exit 0
+
+      - name: Step 2 — Generate PNG + MP4 files
+        id: generate
+        if: steps.fetch.outputs.tweet_count != '0'
+        run: |
+          TWEETS='${{ steps.fetch.outputs.tweets_json }}'
+          TWEETS_ARRAY=$(echo "$TWEETS" | python3 -c "import sys,json; data=json.load(sys.stdin); print(json.dumps(data['tweets']))")
+
+          RESPONSE=$(curl -sf --max-time 300 -X POST http://localhost:3000/api/generate \
+            -H "Content-Type: application/json" \
+            -d "{\"tweets\": $TWEETS_ARRAY}")
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"error"'; then
+            echo "generate failed: $RESPONSE"
+            exit 1
+          fi
+
+          echo "files_json=$RESPONSE" >> $GITHUB_OUTPUT
+
+      - name: Step 3 — Upload to Google Drive
+        if: steps.fetch.outputs.tweet_count != '0'
+        run: |
+          FILES='${{ steps.generate.outputs.files_json }}'
+          FILES_ARRAY=$(echo "$FILES" | python3 -c "import sys,json; data=json.load(sys.stdin); print(json.dumps(data['files']))")
+
+          RESPONSE=$(curl -sf --max-time 120 -X POST http://localhost:3000/api/upload-drive \
+            -H "Content-Type: application/json" \
+            -d "{\"files\": $FILES_ARRAY}")
+          echo "Response: $RESPONSE"
+
+          if echo "$RESPONSE" | grep -q '"error"'; then
+            echo "upload-drive failed: $RESPONSE"
+            exit 1
+          fi
+
+          echo "Pipeline complete. Files uploaded to Google Drive."
+          echo "https://drive.google.com/drive/folders/0AEw3aJ2mMki4Uk9PVA"
+
+      - name: Clean up secrets from disk
+        if: always()
+        run: |
+          rm -f .env.local service-account.json
