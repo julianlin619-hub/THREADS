@@ -99,6 +99,28 @@ jobs:
         if: steps.fetch.outputs.tweet_count == '0'
         run: echo "No new tweets from @AlexHormozi in the past 24 hours. Nothing to post."
 
+      - name: Step 3 — Post bank tweets to Threads via Buffer
+        run: |
+          echo "Selecting 5 random tweets from the bank..."
+          RESPONSE=$(curl -s --max-time 120 -X POST http://localhost:3000/api/post-bank-tweets \
+            -H "Content-Type: application/json")
+          echo "Response: $RESPONSE"
+
+          if [ -z "$RESPONSE" ]; then
+            echo "post-bank-tweets returned empty response"
+            exit 1
+          fi
+
+          if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            echo "post-bank-tweets failed: $RESPONSE"
+            exit 1
+          fi
+
+          POSTED=$(echo "$RESPONSE" | jq '.posted')
+          ERRORS=$(echo "$RESPONSE" | jq '.errors | length')
+          REMAINING=$(echo "$RESPONSE" | jq '.remaining')
+          echo "Bank tweets — queued $POSTED to Buffer, $ERRORS errors, $REMAINING remaining in bank."
+
       - name: Clean up secrets from disk
         if: always()
         run: rm -f .env.local
