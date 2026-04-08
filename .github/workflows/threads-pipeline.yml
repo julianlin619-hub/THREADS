@@ -1,9 +1,9 @@
 name: THREADS Pipeline
 
 on:
-  schedule:
-    # Runs every day at 9:00 AM UTC
-    - cron: '0 9 * * *'
+  # schedule disabled — project migrated away
+  # schedule:
+  #   - cron: '0 9 * * *'
   workflow_dispatch: # Allow manual runs from GitHub UI
 
 env:
