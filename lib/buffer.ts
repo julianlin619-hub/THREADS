@@ -21,7 +21,7 @@ const CREATE_POST_MUTATION = `
   }
 `;
 
-export async function postToBuffer(text: string): Promise<{ id: string; status: string }> {
+export async function postToBuffer(text: string): Promise<void> {
   const token = process.env.BUFFER_ACCESS_TOKEN;
   const channelId = process.env.BUFFER_THREADS_CHANNEL_ID;
 
@@ -60,6 +60,4 @@ export async function postToBuffer(text: string): Promise<{ id: string; status: 
     throw new Error(`Buffer error: ${result.message}`);
   }
 
-  const post = result?.post;
-  return { id: post?.id ?? 'unknown', status: post?.status ?? 'queued' };
 }
