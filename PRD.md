@@ -2,7 +2,7 @@
 
 ## Overview
 
-THREADS is an automated pipeline that scrapes recent tweets from @AlexHormozi on X (Twitter) and reposts them verbatim to Threads via Buffer. It runs on a daily schedule via GitHub Actions and can also be triggered manually through a web dashboard.
+THREADS is an automated pipeline that scrapes recent tweets from @LeilaHormozi on X (Twitter) and reposts them verbatim to Threads via Buffer. It runs on a daily schedule via GitHub Actions and can also be triggered manually through a web dashboard.
 
 The goal is zero-touch content syndication: every tweet posted in the last 24 hours by a source account gets queued to Threads automatically, without any editing or reformatting.
 
@@ -15,14 +15,12 @@ The goal is zero-touch content syndication: every tweet posted in the last 24 ho
          ↓
 POST /api/fetch-tweets
   ├── Calls Apify actor: apidojo/tweet-scraper
-  ├── Target: @AlexHormozi, past 24 hours, sort: Latest
-  ├── Deduplicates against tweet-history.json
+  ├── Target: @LeilaHormozi, past 24 hours, sort: Latest
   └── Returns: { tweets: [{ id, text, createdAt, url }] }
          ↓
 POST /api/post-threads
   ├── For each tweet: POST to Buffer API queue
   ├── Buffer adds it to Threads scheduled queue
-  ├── Records posted tweet IDs to tweet-history.json
   └── Returns: { posted: N, errors: [] }
 ```
 
@@ -37,7 +35,7 @@ POST /api/post-threads
 **Input parameters:**
 ```json
 {
-  "twitterHandles": ["AlexHormozi"],
+  "twitterHandles": ["LeilaHormozi"],
   "maxItems": 50,
   "sort": "Latest"
 }
@@ -85,31 +83,13 @@ Each tweet is created as a Buffer **Idea** — Buffer's content pool from which 
 
 ---
 
-## Deduplication Strategy
-
-All processed tweet IDs are stored in `data/tweet-history.json`:
-
-```json
-{
-  "seenIds": ["tweet_id_1", "tweet_id_2"],
-  "postCount": 3
-}
-```
-
-- `seenIds` — IDs of all tweets ever fetched (prevents reposting)
-- `postCount` — running count of pipeline runs
-
-The fetch step checks `seenIds` before returning tweets. Already-seen tweets are silently skipped. `postCount` increments on each successful post run.
-
-To reset and reprocess all tweets: use the "Reset History" button in the web UI or call `POST /api/reset-history`.
-
----
-
 ## GitHub Actions Schedule
 
 **File:** `.github/workflows/threads-pipeline.yml`
-**Schedule:** Weekdays (Mon–Fri) at 9:00 AM UTC
+**Schedule:** Daily at 4:00 AM PST (12:00 PM UTC)
 **Manual trigger:** `workflow_dispatch` (GitHub UI or API)
+
+No deduplication is needed — the pipeline runs once every 24 hours and only fetches tweets from the past 24 hours, so there is no overlap.
 
 **Pipeline steps:**
 1. Checkout repo + setup Node 20
@@ -117,7 +97,7 @@ To reset and reprocess all tweets: use the "Reset History" button in the web UI 
 3. Write `.env.local` from GitHub Secrets
 4. Build Next.js app
 5. Start server, wait for readiness
-6. `POST /api/fetch-tweets` — scrape @AlexHormozi (past 24h)
+6. `POST /api/fetch-tweets` — scrape @LeilaHormozi (past 24h)
 7. If tweets found: `POST /api/post-threads` — queue to Buffer
 8. Log results
 9. Clean up secrets from disk
@@ -147,7 +127,6 @@ URL: `/pipeline`
 The dashboard provides:
 1. **Fetch Tweets** — manually trigger Apify scrape, shows list of new tweets with timestamps
 2. **Post to Threads** — select tweets and queue them to Buffer (deselect any you want to skip)
-3. **Reset History** — clear `seenIds` so all recent tweets can be re-fetched
 
 ---
 
@@ -156,4 +135,4 @@ The dashboard provides:
 1. **Buffer new apps blocked:** Buffer closed new developer app registrations. An existing Buffer developer account with API access is required.
 2. **Apify paid plan required:** Free Apify plan does not allow API calls; a paid plan ($5/month free credits) is needed.
 3. **24h window is approximate:** Apify actor runtime varies (1–3 min). The 24h lookback is computed at request time and applied client-side after the actor completes.
-4. **Threads character limit:** Threads posts max out at 500 characters. Long tweets will be truncated by Buffer silently — monitor for this if @AlexHormozi posts long threads.
+4. **Threads character limit:** Threads posts max out at 500 characters. Long tweets will be truncated by Buffer silently — monitor for this if @LeilaHormozi posts long threads.

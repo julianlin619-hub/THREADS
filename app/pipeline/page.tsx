@@ -24,27 +24,7 @@ export default function PipelinePage() {
   const [fetchLoading, setFetchLoading] = useState(false);
   const [postLoading, setPostLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resetConfirm, setResetConfirm] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
   const [postResult, setPostResult] = useState<{ posted: number; errors: PostError[] } | null>(null);
-
-  async function handleReset() {
-    setResetLoading(true);
-    setResetSuccess(false);
-    try {
-      await fetch('/api/reset-history', { method: 'POST' });
-      setTweets([]);
-      setSelectedIds(new Set());
-      setPostResult(null);
-      setError(null);
-      setResetConfirm(false);
-      setResetSuccess(true);
-      setTimeout(() => setResetSuccess(false), 3000);
-    } finally {
-      setResetLoading(false);
-    }
-  }
 
   async function fetchTweets() {
     setFetchLoading(true);
@@ -57,7 +37,7 @@ export default function PipelinePage() {
       setTweets(data.tweets);
       setSelectedIds(new Set(data.tweets.map((t: Tweet) => t.id)));
       if (data.tweets.length === 0) {
-        setError('No new tweets in the past 24 hours — all recent tweets have already been seen. Reset history to re-fetch.');
+        setError('No new tweets from @LeilaHormozi in the past 24 hours.');
       }
     } catch (e) {
       setError((e as Error).message);
@@ -139,38 +119,9 @@ export default function PipelinePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3 flex-wrap">
-                <Button onClick={fetchTweets} disabled={fetchLoading || resetLoading}>
+                <Button onClick={fetchTweets} disabled={fetchLoading}>
                   {fetchLoading ? 'Fetching…' : tweets.length > 0 ? 'Re-fetch from Apify' : 'Fetch from Apify'}
                 </Button>
-                {!resetConfirm ? (
-                  <button
-                    onClick={() => setResetConfirm(true)}
-                    disabled={fetchLoading || resetLoading}
-                    className="text-sm text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                  >
-                    Reset History
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Clear seen tweet history?</span>
-                    <button
-                      onClick={handleReset}
-                      disabled={resetLoading}
-                      className="text-destructive hover:underline font-medium"
-                    >
-                      {resetLoading ? 'Resetting…' : 'Confirm Reset'}
-                    </button>
-                    <button
-                      onClick={() => setResetConfirm(false)}
-                      className="text-muted-foreground hover:underline"
-                    >
-                      Cancel
-                    </button>
-                  </span>
-                )}
-                {resetSuccess && (
-                  <span className="text-sm text-green-500">History cleared.</span>
-                )}
               </div>
 
               {tweets.length > 0 && (
