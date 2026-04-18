@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { ApifyClient } from 'apify-client';
-import { getHistory, addSeenIds } from '@/lib/tweet-history';
 
 function decodeHtml(str: string): string {
   return str
@@ -26,7 +25,7 @@ export async function POST() {
     const client = new ApifyClient({ token: apiKey });
 
     const { defaultDatasetId } = await client.actor('apidojo~tweet-scraper').call({
-      twitterHandles: ['AlexHormozi'],
+      twitterHandles: ['LeilaHormozi'],
       maxItems: 50,
       sort: 'Latest',
     });
@@ -46,15 +45,7 @@ export async function POST() {
       .filter((t) => t.text.trim() && new Date(t.createdAt).getTime() >= cutoff)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    const { seenIds } = getHistory();
-    const seenSet = new Set(seenIds);
-    const newTweets = tweets.filter((t) => !seenSet.has(t.id));
-
-    if (newTweets.length > 0) {
-      addSeenIds(newTweets.map((t) => t.id));
-    }
-
-    return NextResponse.json({ tweets: newTweets });
+    return NextResponse.json({ tweets });
   } catch (err) {
     const error = err as { message?: string };
     console.error('Apify error:', error.message);

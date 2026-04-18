@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { postToBuffer } from '@/lib/buffer';
-import { addSeenIds, incrementPostCount } from '@/lib/tweet-history';
 
 interface Tweet {
   id: string;
@@ -24,11 +23,6 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       errors.push({ id: tweet.id, error: (err as Error).message });
     }
-  }
-
-  if (posted.length > 0) {
-    addSeenIds(posted);
-    incrementPostCount();
   }
 
   return NextResponse.json({ posted: posted.length, errors });

@@ -2,8 +2,8 @@ name: THREADS Pipeline
 
 on:
   schedule:
-    # Runs every day at 9:00 AM UTC
-    - cron: '0 9 * * *'
+    # Runs every day at 4:00 AM PST (12:00 PM UTC)
+    - cron: '0 12 * * *'
   workflow_dispatch: # Allow manual runs from GitHub UI
 
 env:
@@ -52,7 +52,7 @@ jobs:
       - name: Step 1 — Fetch tweets from Apify
         id: fetch
         run: |
-          echo "Fetching tweets from @AlexHormozi (past 24h)..."
+          echo "Fetching tweets from @LeilaHormozi (past 24h)..."
           RESPONSE=$(curl -s --max-time 300 -X POST http://localhost:3000/api/fetch-tweets \
             -H "Content-Type: application/json")
           echo "Response: $RESPONSE"
@@ -97,7 +97,7 @@ jobs:
 
       - name: No new tweets
         if: steps.fetch.outputs.tweet_count == '0'
-        run: echo "No new tweets from @AlexHormozi in the past 24 hours. Nothing to post."
+        run: echo "No new tweets from @LeilaHormozi in the past 24 hours. Nothing to post."
 
       - name: Step 3 — Post bank tweets to Threads via Buffer
         run: |
