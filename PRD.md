@@ -36,7 +36,7 @@ POST /api/post-threads
 ```json
 {
   "twitterHandles": ["LeilaHormozi"],
-  "maxItems": 50,
+  "maxItems": 5,
   "sort": "Latest"
 }
 ```
@@ -44,7 +44,7 @@ POST /api/post-threads
 **24-hour filtering:** After the actor returns results, tweets are filtered client-side by `createdAt` timestamp to include only those from the past 24 hours. This is more reliable than relying on Apify's search date filters.
 
 **Output fields used per tweet:**
-- `id` — unique tweet ID (used for deduplication)
+- `id` — unique tweet ID
 - `text` — full tweet text (reposted verbatim)
 - `createdAt` — ISO timestamp (used for 24h filter)
 - `url` — source tweet URL (stored for reference)
@@ -57,27 +57,28 @@ POST /api/post-threads
 
 **API:** GraphQL at `https://api.buffer.com/graphql`
 **Auth:** Bearer token via `BUFFER_ACCESS_TOKEN` env var
-**Organization ID:** `67dafe21c453882020852a9a` (set as `BUFFER_ORGANIZATION_ID`)
+**Channel ID:** Leila Hormozi Threads channel (set as `BUFFER_THREADS_CHANNEL_ID`)
 
 **Mutation used:**
 ```graphql
-mutation CreateIdea {
-  createIdea(input: {
-    organizationId: "67dafe21c453882020852a9a"
-    content: {
-      title: "<first line of tweet, max 100 chars>"
-      text: "<full tweet text verbatim>"
-    }
+mutation CreatePost($channelId: ChannelId!, $text: String!) {
+  createPost(input: {
+    channelId: $channelId
+    text: $text
+    schedulingType: automatic
+    mode: addToQueue
   }) {
-    ... on Idea {
-      id
-      content { title text }
+    ... on PostActionSuccess {
+      post { id status }
     }
+    ... on InvalidInputError { message }
+    ... on UnexpectedError { message }
+    ... on LimitReachedError { message }
   }
 }
 ```
 
-Each tweet is created as a Buffer **Idea** — Buffer's content pool from which posts can be scheduled to Threads and other channels.
+Each tweet is posted directly to the Threads channel queue via Buffer's `createPost` mutation.
 
 **Important constraint:** Buffer no longer accepts new developer app registrations. You must already have an existing Buffer developer app with a valid access token.
 
@@ -105,7 +106,7 @@ No deduplication is needed — the pipeline runs once every 24 hours and only fe
 **Required GitHub Secrets:**
 - `APIFY_API_KEY`
 - `BUFFER_ACCESS_TOKEN`
-- `BUFFER_THREADS_PROFILE_ID`
+- `BUFFER_THREADS_CHANNEL_ID`
 
 ---
 
@@ -115,8 +116,7 @@ No deduplication is needed — the pipeline runs once every 24 hours and only fe
 |----------|----------|-------------|
 | `APIFY_API_KEY` | Yes | Apify API token for tweet scraping |
 | `BUFFER_ACCESS_TOKEN` | Yes | Buffer OAuth long-lived access token |
-| `BUFFER_ORGANIZATION_ID` | Yes | Buffer organization ID (`67dafe21c453882020852a9a`) |
-| `PORT` | No | Server port (default: 3000) |
+| `BUFFER_THREADS_CHANNEL_ID` | Yes | Buffer channel ID for Leila Hormozi Threads |
 
 ---
 
