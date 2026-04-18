@@ -26,7 +26,7 @@ export async function POST() {
 
     const { defaultDatasetId } = await client.actor('apidojo~tweet-scraper').call({
       twitterHandles: ['LeilaHormozi'],
-      maxItems: 50,
+      maxItems: 5,
       sort: 'Latest',
     });
 
