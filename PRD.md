@@ -2,7 +2,7 @@
 
 ## Overview
 
-THREADS is an automated pipeline that scrapes recent tweets from @LeilaHormozi on X (Twitter) and reposts them verbatim to Threads via Buffer. It runs on a daily schedule via GitHub Actions and can also be triggered manually through a web dashboard.
+THREADS is an automated pipeline that scrapes recent tweets from @LeilaHormozi on X (Twitter) and reposts them verbatim to Threads via Buffer. It runs on a daily schedule via GitHub Actions.
 
 The goal is zero-touch content syndication: every tweet posted in the last 24 hours by a source account gets queued to Threads automatically, without any editing or reformatting.
 
@@ -11,7 +11,7 @@ The goal is zero-touch content syndication: every tweet posted in the last 24 ho
 ## Architecture
 
 ```
-[GitHub Actions cron / Web UI]
+[GitHub Actions cron]
          ↓
 POST /api/fetch-tweets
   ├── Calls Apify actor: apidojo/tweet-scraper
@@ -117,16 +117,6 @@ No deduplication is needed — the pipeline runs once every 24 hours and only fe
 | `BUFFER_ACCESS_TOKEN` | Yes | Buffer OAuth long-lived access token |
 | `BUFFER_ORGANIZATION_ID` | Yes | Buffer organization ID (`67dafe21c453882020852a9a`) |
 | `PORT` | No | Server port (default: 3000) |
-
----
-
-## Web Dashboard
-
-URL: `/pipeline`
-
-The dashboard provides:
-1. **Fetch Tweets** — manually trigger Apify scrape, shows list of new tweets with timestamps
-2. **Post to Threads** — select tweets and queue them to Buffer (deselect any you want to skip)
 
 ---
 

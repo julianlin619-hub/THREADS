@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-
 export default function Home() {
-  redirect('/pipeline');
+  return <p>THREADS pipeline — API only</p>;
 }
